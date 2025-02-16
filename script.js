@@ -9,6 +9,16 @@ let relayConnections = {};   // WebSocket connections to each relay URL
 // We'll store the current "prepared" event in memory before signing.
 let preparedEvent = null;    // The raw event (unsigned) that we display in the JSON modal
 
+// Outbox array (loaded from localStorage)
+let outbox = [];
+
+/***************************************************
+ * On page load: load outbox from localStorage
+ ***************************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  loadOutbox();
+});
+
 /***************************************************
  * Utility: generate random slug
  ***************************************************/
@@ -136,8 +146,7 @@ function prepareNote(isEdit) {
   };
 
   // Show JSON in modal
-  const jsonPreviewEl = document.getElementById("jsonPreview");
-  jsonPreviewEl.textContent = JSON.stringify(preparedEvent, null, 2);
+  document.getElementById("jsonPreview").textContent = JSON.stringify(preparedEvent, null, 2);
 
   // Show the modal (Bootstrap 5)
   const modalEl = document.getElementById('jsonModal');
@@ -177,10 +186,6 @@ async function publishNote() {
     return;
   }
 
-  // Replace preparedEvent with the signed version
-  signedEvent.id = signedEvent.id;
-  signedEvent.sig = signedEvent.sig;
-
   // Broadcast to all open relays with write permission
   let publishedCount = 0;
   Object.entries(relayConnections).forEach(([url, conn]) => {
@@ -215,4 +220,167 @@ async function publishNote() {
 function getSlugFromEvent(ev) {
   const dTag = ev.tags.find(tag => tag[0] === 'd');
   return dTag ? dTag[1] : '';
+}
+
+/***************************************************
+ * Outbox: load from localStorage
+ ***************************************************/
+function loadOutbox() {
+  try {
+    const raw = localStorage.getItem("nostrOutbox");
+    outbox = raw ? JSON.parse(raw) : [];
+  } catch(e) {
+    console.error("Error parsing outbox from localStorage:", e);
+    outbox = [];
+  }
+}
+
+/***************************************************
+ * Outbox: save to localStorage
+ ***************************************************/
+function saveOutbox() {
+  localStorage.setItem("nostrOutbox", JSON.stringify(outbox));
+}
+
+/***************************************************
+ * "Save to Outbox" button:
+ *   Build an event object (WITHOUT signing), store it in outbox
+ ***************************************************/
+function saveDraftToOutbox() {
+  if (!pubkey) {
+    alert("Please connect with Nostr first.");
+    return;
+  }
+  const markdownContent = document.getElementById("markdown-input").value.trim();
+  if (!markdownContent) {
+    alert("No markdown content to save.");
+    return;
+  }
+
+  let slugInput = document.getElementById("slug-input").value.trim();
+  if (!slugInput) {
+    slugInput = generateRandomSlug();
+  }
+  currentSlug = slugInput;
+
+  const now = Math.floor(Date.now() / 1000);
+  const draftEvent = {
+    kind: 30023,
+    pubkey: pubkey,
+    created_at: now,
+    tags: [ ["d", slugInput] ],
+    content: markdownContent
+  };
+
+  // Add to outbox array
+  outbox.push(draftEvent);
+  saveOutbox();
+
+  document.getElementById("info-area").innerHTML = `
+    <div class="alert alert-info mt-3">
+      Draft saved to outbox with slug: <code>${slugInput}</code>
+    </div>
+  `;
+}
+
+/***************************************************
+ * Show outbox modal
+ ***************************************************/
+document.getElementById("viewOutboxBtn").addEventListener("click", () => {
+  renderOutbox();
+  const modalEl = document.getElementById('outboxModal');
+  const bsModal = new bootstrap.Modal(modalEl, { keyboard: false });
+  bsModal.show();
+});
+
+/***************************************************
+ * Render outbox in the table
+ ***************************************************/
+function renderOutbox() {
+  const tbody = document.getElementById("outboxTableBody");
+  tbody.innerHTML = "";
+  outbox.forEach((ev, index) => {
+    const slug = getSlugFromEvent(ev);
+    const snippet = ev.content.slice(0, 40).replace(/\n/g, " ") + (ev.content.length > 40 ? "..." : "");
+    const created = new Date(ev.created_at * 1000).toLocaleString();
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${slug}</td>
+      <td>${snippet}</td>
+      <td>${created}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-primary me-2" onclick="showOutboxJson(${index})">
+          <i class="fa fa-eye"></i> JSON
+        </button>
+        <button class="btn btn-sm btn-success me-2" onclick="publishOutboxEvent(${index})">
+          <i class="fa fa-upload"></i> Sign & Publish
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="removeOutboxEvent(${index})">
+          <i class="fa fa-trash"></i> Delete
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/***************************************************
+ * Show raw JSON in an alert or modal
+ ***************************************************/
+function showOutboxJson(index) {
+  const ev = outbox[index];
+  alert(JSON.stringify(ev, null, 2));
+  // You could also open another modal for pretty display if desired.
+}
+
+/***************************************************
+ * Sign & publish an outbox event
+ *  - same flow as publishNote(), but using the draft
+ ***************************************************/
+async function publishOutboxEvent(index) {
+  const ev = outbox[index];
+  if (!pubkey) {
+    alert("Please connect with Nostr first.");
+    return;
+  }
+  if (ev.pubkey !== pubkey) {
+    alert("This draft belongs to a different pubkey. Cannot sign.");
+    return;
+  }
+
+  // Sign
+  let signedEvent;
+  try {
+    signedEvent = await window.nostr.signEvent(ev);
+  } catch (err) {
+    console.error("Failed to sign outbox event:", err);
+    alert("Could not sign the event. Check console logs.");
+    return;
+  }
+
+  // Broadcast
+  let publishedCount = 0;
+  Object.entries(relayConnections).forEach(([url, conn]) => {
+    if (conn.isOpen && conn.policy.write) {
+      conn.ws.send(JSON.stringify(["EVENT", signedEvent]));
+      publishedCount++;
+    }
+  });
+
+  if (publishedCount > 0) {
+    alert(`Event published to ${publishedCount} relays!\n\nEvent ID: ${signedEvent.id}`);
+  } else {
+    alert("No open relays with write permission found. Event not sent.");
+  }
+}
+
+/***************************************************
+ * Remove a draft from outbox
+ ***************************************************/
+function removeOutboxEvent(index) {
+  if (!confirm("Are you sure you want to delete this draft?")) return;
+  outbox.splice(index, 1);
+  saveOutbox();
+  renderOutbox();
 }

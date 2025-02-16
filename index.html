@@ -2,103 +2,213 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>LongPost.net — Nostr Long-Form Note Demo</title>
-  
-  <!-- Bootstrap CSS from CDN -->
+  <title>LongPost.net — Medium-Style</title>
+
+  <!-- Bootstrap CSS from CDN (for layout, modals, etc.) -->
   <link 
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
     rel="stylesheet"
   />
   
-  <!-- Font Awesome Icons (v4.7.0 for example) -->
+  <!-- Font Awesome Icons (optional) -->
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css"
   />
   
-  <!-- Google Fonts (Roboto example) -->
+  <!-- Merriweather (serif) + Roboto (sans-serif) -->
   <link 
     rel="preconnect" 
     href="https://fonts.googleapis.com"
   />
   <link 
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Roboto&display=swap"
+    rel="stylesheet" 
+    href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;700&family=Roboto&display=swap"
   />
-
-  <!-- Markdown Renderer (marked.js) -->
+  
+  <!-- Markdown Renderer -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   
-  <!-- Our main JavaScript file -->
+  <!-- Your main JavaScript (unchanged) -->
   <script src="./script.js" defer></script>
 
   <style>
+    /* Global Body */
     body {
+      margin: 0;
+      padding: 0;
+      background: #fff; 
+      color: #2F2F2F;
+      font-family: 'Merriweather', serif; /* main reading font */
+      font-size: 18px;
+      line-height: 1.75;
+    }
+
+    /* Navbar */
+    .navbar {
       font-family: 'Roboto', sans-serif;
-      background: #f8f9fa;
+      border-bottom: 1px solid #e2e2e2;
+      background-color: #fff !important;
     }
+    /* Brand uses Merriweather for a more Medium-like heading style */
     .navbar-brand {
-      /* Ensure the brand is extra bold */
+      font-family: 'Merriweather', serif;
       font-weight: 700;
+      font-size: 1.4rem;
+      margin-right: 2rem;
+      color: #000 !important;
     }
-    .jumbotron {
-      background: #fff;
-      padding: 2rem 2rem;
-      border-radius: .5rem;
-      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    .nav-link {
+      color: #555 !important;
+      font-weight: 400;
+      margin-right: 1rem;
+    }
+    .nav-link:hover {
+      color: #000 !important;
+    }
+    .navbar-toggler {
+      border: none;
+    }
+
+    /* Hero Header */
+    .hero-header {
+      padding: 3rem 1rem 2rem 1rem;
+      text-align: center;
+    }
+    .hero-header h1 {
+      font-family: 'Merriweather', serif;
+      font-weight: 700;
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    .hero-header p.lead {
+      font-size: 1.25rem;
+      color: #757575;
+    }
+
+    /* Medium-like container */
+    .medium-container {
+      max-width: 750px;  
+      margin: 0 auto;
+    }
+
+    /* Editor / Card */
+    .editor-card {
+      border: none;
       margin-bottom: 2rem;
     }
-    #preview-area {
-      border: 1px solid #ccc;
-      padding: 1rem;
-      min-height: 200px;
-      background-color: #fafafa;
-      border-radius: .25rem;
+    .editor-card .card-body {
+      padding-left: 0;
+      padding-right: 0;
     }
-    .hidden {
-      display: none !important;
+    .editor-card h5 {
+      font-family: 'Merriweather', serif;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
     }
-    footer {
-      margin-top: 2rem;
-      padding-top: 1rem;
-      border-top: 1px solid #dee2e6;
-      text-align: center;
-      color: #6c757d;
+    .editor-card p.card-text {
+      color: #757575;
+      font-size: 1rem;
+      margin-bottom: 2rem;
     }
-    pre.json-preview {
-      background-color: #f8f9fa; 
-      padding: 1rem;
+
+    /* Forms & Buttons */
+    .form-label.fw-bold {
+      font-family: 'Roboto', sans-serif;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      color: #333;
+    }
+    #slug-input, #markdown-input {
+      border: 1px solid #e2e2e2;
       border-radius: 4px;
+      padding: 0.75rem;
+      font-family: 'Merriweather', serif;
+    }
+    #markdown-input {
+      resize: vertical;
+    }
+    .btn {
+      border-radius: 20px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 0.9rem;
+      padding: 0.5rem 1.25rem;
+    }
+    .btn-success {
+      background-color: #000 !important;
+      border-color: #000 !important;
+    }
+    .btn-success:hover {
+      background-color: #333 !important;
+      border-color: #333 !important;
+    }
+
+    /* Preview area */
+    #preview-area {
+      margin-top: 1rem;
+      padding: 1rem 0;
+      border-top: 1px solid #e2e2e2;
+      min-height: 200px;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid #e2e2e2;
+      text-align: center;
+      padding: 2rem 0;
+      margin-top: 3rem;
+      font-family: 'Roboto', sans-serif;
+      color: #757575;
+      font-size: 0.9rem;
+    }
+    footer a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* Modal / Outbox table */
+    .modal-content {
+      border-radius: 0;
+    }
+    .modal-header, .modal-footer {
+      border-color: #e2e2e2;
+    }
+    .table > :not(caption) > * > * {
+      border-color: #e2e2e2;
     }
   </style>
 </head>
+
 <body>
 
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm">
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg">
   <div class="container">
-    <!-- Brand in bold -->
-    <a class="navbar-brand fw-bold" href="#">LongPost.net <small>very beta</small></a>
-    <!-- Mobile menu toggle -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-      aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"
+    <a class="navbar-brand" href="#">LongPost.net</a>
+    <button 
+      class="navbar-toggler" 
+      type="button" 
+      data-bs-toggle="collapse" 
+      data-bs-target="#navbarNav"
+      aria-controls="navbarNav" 
+      aria-expanded="false" 
+      aria-label="Toggle navigation"
     >
       <span class="navbar-toggler-icon"></span>
     </button>
-
-    <!-- Collapsible content -->
+    
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <!-- Placeholder nav links -->
         <li class="nav-item">
           <a class="nav-link" href="https://github.com/nvk/longpost.net">GitHub</a>
         </li>
-        <!-- Zap + Robot -->
+
+        <!-- Zap + Robot (reverted to original approach) -->
         <li class="nav-item d-flex align-items-center">
           <a class="nav-link" href="https://primal.net/nvk">Zap Me</a>
-          <!-- Robot emoji with Bootstrap tooltip -->
           <span 
-            class="ms-2" 
+            class="ms-2"
             style="cursor: pointer;"
             data-bs-toggle="tooltip"
             data-bs-placement="top"
@@ -108,9 +218,8 @@
           </span>
         </li>
 
-        <!-- Outbox button (original) -->
-        <li class="nav-item">
-          <button class="btn btn-outline-secondary ms-lg-3" id="viewOutboxBtn">
+        <li class="nav-item ms-3">
+          <button class="btn btn-outline-secondary" id="viewOutboxBtn">
             <i class="fa fa-inbox"></i> View Outbox
           </button>
         </li>
@@ -119,37 +228,40 @@
   </div>
 </nav>
 
-<!-- Main Container -->
-<div class="container my-4">
-  <div class="jumbotron">
-    <h1 class="display-5 mb-3">Welcome to LongPost.net</h1>
+<!-- HERO / WELCOME SECTION -->
+<header class="hero-header">
+  <div class="medium-container">
+    <h1>Welcome to LongPost.net</h1>
     <p class="lead">
       A simple tool to create and edit NIP-23 long-form notes on Nostr.
     </p>
-    <hr class="my-4">
-    <p>
-      Use your NIP-07 wallet/extension to sign in, paste Markdown, preview, and publish. 
+    <p class="lead text-muted" style="font-size:1rem;">
+      Use your NIP-07 wallet to sign in, paste Markdown, preview, and publish.
       Automatically pulls your relays (if supported) and publishes your content via Nostr.
     </p>
   </div>
+</header>
 
-  <!-- 1) Connect with Nostr -->
-  <div class="mb-4 text-center">
+<!-- MAIN CONTENT CONTAINER -->
+<main class="medium-container">
+
+  <!-- Connect with Nostr -->
+  <div class="text-center mb-5">
     <button id="connect-nostr-btn" class="btn btn-primary">
       <i class="fa fa-sign-in"></i> Connect with Nostr
     </button>
     <span id="pubkey-label" class="ms-3 fw-bold"></span>
   </div>
 
-  <!-- Editor Container -->
-  <div class="card mb-4">
+  <!-- Editor Card -->
+  <div class="card editor-card">
     <div class="card-body">
       <h5 class="card-title">Create or Edit a Long-Form Post</h5>
       <p class="card-text">
-        Paste your Markdown content below, choose a slug (optional), and preview or publish.
+        Paste your Markdown below, choose a slug (optional), and preview or publish.
       </p>
 
-      <!-- Slug / Param input (d-tag) -->
+      <!-- Slug -->
       <div class="mb-3">
         <label for="slug-input" class="form-label fw-bold">Slug (d-tag)</label>
         <input 
@@ -159,7 +271,7 @@
           placeholder="Enter a unique slug or leave empty to auto-generate"
         />
         <small class="text-muted">
-          This identifies your post. Re-publishing with the same slug replaces the old version (NIP-33).
+          Re-publishing with the same slug replaces the old version (NIP-33).
         </small>
       </div>
 
@@ -175,31 +287,31 @@
       </div>
 
       <!-- Buttons row -->
-      <div class="mb-3">
+      <div class="mb-3 d-flex flex-wrap" style="gap: 1rem;">
         <button 
           id="preview-btn" 
-          class="btn btn-secondary me-2"
+          class="btn btn-secondary"
           onclick="previewMarkdown()"
         >
           <i class="fa fa-eye"></i> Preview
         </button>
-        <!-- “Prepare & Publish” triggers the JSON preview modal (like nos2x) -->
+
         <button 
           id="publish-btn" 
-          class="btn btn-success me-2"
+          class="btn btn-success"
           onclick="prepareNote(false)"
         >
           <i class="fa fa-upload"></i> Publish New Post
         </button>
-        <!-- Re-publish for editing the same slug -->
+
         <button 
           id="edit-btn" 
-          class="btn btn-warning me-2 hidden"
+          class="btn btn-warning hidden"
           onclick="prepareNote(true)"
         >
           <i class="fa fa-edit"></i> Re-Publish (Edit)
         </button>
-        <!-- Outbox draft (save for later) -->
+
         <button
           id="saveOutboxBtn"
           class="btn btn-outline-info"
@@ -212,18 +324,19 @@
   </div>
 
   <!-- Preview area -->
-  <div class="card mb-4">
+  <div class="card editor-card">
     <div class="card-body">
-      <h5 class="card-title">Preview</h5>
+      <h5 class="card-title" style="margin-bottom:0.5rem;">Preview</h5>
       <div id="preview-area"></div>
     </div>
   </div>
 
   <!-- Published event info -->
-  <div id="info-area"></div>
-</div>
+  <div id="info-area" style="margin-bottom: 3rem;"></div>
 
-<!-- Modal for showing raw JSON before confirmation -->
+</main>
+
+<!-- JSON Preview Modal -->
 <div class="modal fade" id="jsonModal" tabindex="-1" aria-labelledby="jsonModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -232,7 +345,9 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">This is the raw note that will be signed and published:</p>
+        <p class="text-muted" style="font-family: 'Roboto', sans-serif;">
+          This is the raw note that will be signed and published:
+        </p>
         <pre id="jsonPreview" class="json-preview"></pre>
       </div>
       <div class="modal-footer">
@@ -247,7 +362,7 @@
   </div>
 </div>
 
-<!-- Modal for Outbox: show stored drafts -->
+<!-- Outbox Modal -->
 <div class="modal fade" id="outboxModal" tabindex="-1" aria-labelledby="outboxModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -279,23 +394,27 @@
   </div>
 </div>
 
-<!-- Footer -->
-<footer class="py-2">
-  &copy; <span id="year"></span> <a href="#" class="text-decoration-none text-reset fw-semibold">LongPost.net</a>
+<!-- FOOTER -->
+<footer>
+  &copy; <span id="year"></span> 
+  <a href="#" class="text-decoration-none text-reset">LongPost.net</a> 
+  • Beta software, no warranty provided.
 </footer>
 
-<!-- Bootstrap JS (for modals & tooltips) -->
+<!-- Bootstrap JS + Tooltip init -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   // Set current year in footer
   document.getElementById('year').innerText = new Date().getFullYear();
 
-  // Initialize all tooltips on page load
+  // Initialize tooltips
   document.addEventListener("DOMContentLoaded", function() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipTriggerList = [].slice.call(
+      document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    );
     tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
   });
 </script>
 </body>

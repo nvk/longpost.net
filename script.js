@@ -1,58 +1,52 @@
-/***************************************************
- * Global variables
- ***************************************************/
-let pubkey = null;           // User's pubkey once connected
-let currentSlug = null;      // Slug (d-tag) used for the current post
-let userRelays = {};         // Relay definitions from extension (URL -> {read: bool, write: bool})
-let relayConnections = {};   // WebSocket connections to each relay URL
+/***************************************************************
+ * Global Variables & Fallback Relays
+ ***************************************************************/
+let pubkey = null; // User's pubkey from NIP-07
+let currentSlug = null; // For re-publishing
+let userRelays = {}; // Relay definitions from extension (URL -> {read: bool, write: bool})
+let relayConnections = {}; // WebSocket connections: {url: {ws, policy: {read, write}, isOpen: boolean}}
+let outbox = []; // Local outbox array (loaded from localStorage)
 
-// We'll store the current "prepared" event in memory before signing.
-let preparedEvent = null;    // The raw event (unsigned) that we display in the JSON modal
+const FALLBACK_RELAYS = {
+  "wss://relay.damus.io": { read: true, write: true },
+  "wss://relay.snort.social": { read: true, write: true }
+};
 
-// Outbox array (loaded from localStorage)
-let outbox = [];
-
-/***************************************************
- * On page load: load outbox from localStorage
- ***************************************************/
+/***************************************************************
+ * On Page Load: Load outbox from localStorage
+ ***************************************************************/
 document.addEventListener("DOMContentLoaded", () => {
   loadOutbox();
 });
 
-/***************************************************
- * Utility: generate random slug
- ***************************************************/
+/***************************************************************
+ * Utility: Generate Random Slug
+ ***************************************************************/
 function generateRandomSlug() {
   return "post-" + Math.random().toString(36).substring(2, 10);
 }
 
-/***************************************************
- * Connect with NIP-07
- *  - getPublicKey()
- *  - getRelays() if available
- ***************************************************/
+/***************************************************************
+ * Connect with NIP-07: Get Public Key & Relays
+ ***************************************************************/
 document.getElementById("connect-nostr-btn").onclick = async function () {
   if (!window.nostr) {
     alert("NIP-07 extension not found. Please install Alby or another wallet extension.");
     return;
   }
   try {
-    // 1) Get public key
     pubkey = await window.nostr.getPublicKey();
     document.getElementById("pubkey-label").innerText = "Connected: " + pubkey;
-
-    // 2) Get user relays (if extension supports it)
+    
     if (typeof window.nostr.getRelays === "function") {
       userRelays = await window.nostr.getRelays();
       console.log("User's published relays:", userRelays);
       connectToUserRelays();
     } else {
       alert("This extension does not support getRelays(). No custom relays fetched.");
-      // Optionally define a fallback if you want:
-      // userRelays = {
-      //   "wss://relay.damus.io": { read: true, write: true },
-      // };
-      // connectToUserRelays();
+      // Optionally, set userRelays to an empty object and rely on fallback:
+      userRelays = {};
+      connectToUserRelays();
     }
   } catch (err) {
     console.error(err);
@@ -60,69 +54,66 @@ document.getElementById("connect-nostr-btn").onclick = async function () {
   }
 };
 
-/***************************************************
- * Connect to each user relay (with read/write)
- ***************************************************/
+/***************************************************************
+ * Connect to Each User Relay (or Fallback)
+ ***************************************************************/
 function connectToUserRelays() {
-  Object.entries(userRelays).forEach(([url, policy]) => {
-    // Only connect if at least read or write is true
+  let finalRelays = {};
+  if (Object.keys(userRelays).length === 0) {
+    finalRelays = FALLBACK_RELAYS;
+  } else {
+    finalRelays = userRelays;
+  }
+
+  Object.entries(finalRelays).forEach(([url, policy]) => {
     if (!policy.read && !policy.write) return;
 
-    // Create WebSocket for this relay
     const ws = new WebSocket(url);
     ws.onopen = () => {
       console.log("Connected to relay:", url);
+      relayConnections[url].isOpen = true;
     };
     ws.onerror = (err) => {
       console.error("Relay error:", url, err);
     };
     ws.onclose = () => {
       console.log("Relay closed:", url);
+      relayConnections[url].isOpen = false;
     };
 
-    // Store connection info
     relayConnections[url] = {
       ws,
       policy,
       isOpen: false
     };
-
-    // Track open/closed state
-    ws.addEventListener("open", () => {
-      relayConnections[url].isOpen = true;
-    });
-    ws.addEventListener("close", () => {
-      relayConnections[url].isOpen = false;
-    });
   });
 }
 
-/***************************************************
- * Markdown Preview
- ***************************************************/
+/***************************************************************
+ * Preview Markdown using marked.js
+ ***************************************************************/
 function previewMarkdown() {
   const mdText = document.getElementById("markdown-input").value;
-  const previewArea = document.getElementById("preview-area");
-  previewArea.innerHTML = marked.parse(mdText);
+  if (typeof marked !== "undefined") {
+    document.getElementById("preview-area").innerHTML = marked.parse(mdText);
+  } else {
+    document.getElementById("preview-area").textContent = mdText;
+  }
 }
 
-/***************************************************
- * Step 1: Prepare the event object (un-signed)
- *         Then show the Raw JSON modal for confirmation
- ***************************************************/
+/***************************************************************
+ * Prepare Note: Build Unsigned Event, Show JSON Modal
+ ***************************************************************/
 function prepareNote(isEdit) {
   if (!pubkey) {
     alert("Please connect with Nostr first.");
     return;
   }
-
   const markdownContent = document.getElementById("markdown-input").value.trim();
   if (!markdownContent) {
     alert("No markdown content to publish.");
     return;
   }
-
-  // Use or generate slug
   let slugInput = document.getElementById("slug-input").value.trim();
   if (isEdit && currentSlug) {
     slugInput = currentSlug;
@@ -131,62 +122,47 @@ function prepareNote(isEdit) {
     slugInput = generateRandomSlug();
   }
   currentSlug = slugInput;
-
-  // Create the raw event (un-signed)
   const now = Math.floor(Date.now() / 1000);
   preparedEvent = {
-    kind: 30023, // NIP-23 Long-form note
-    pubkey: pubkey,
+    kind: 30023,
+    pubkey,
     created_at: now,
-    tags: [
-      // 'd' tag for parameterized replaceable events
-      ["d", slugInput],
-    ],
+    tags: [["d", slugInput]],
     content: markdownContent
   };
-
-  // Show JSON in modal
   document.getElementById("jsonPreview").textContent = JSON.stringify(preparedEvent, null, 2);
-
-  // Show the modal (Bootstrap 5)
+  
   const modalEl = document.getElementById('jsonModal');
-  const bsModal = new bootstrap.Modal(modalEl, {
-    keyboard: false
-  });
+  const bsModal = new bootstrap.Modal(modalEl, { keyboard: false });
   bsModal.show();
-
-  // Attach event listener to confirm button
+  
   const confirmBtn = document.getElementById('confirmPublishBtn');
-  // Remove old listeners to avoid stacking
   confirmBtn.replaceWith(confirmBtn.cloneNode(true));
-  // Re-select the new confirm button
   const newConfirmBtn = document.getElementById('confirmPublishBtn');
   newConfirmBtn.addEventListener('click', () => {
     bsModal.hide();
-    publishNote(); // proceed to sign & send
+    publishNote();
   });
 }
 
-/***************************************************
- * Step 2: Confirm & Publish (Sign event, then broadcast)
- ***************************************************/
+/***************************************************************
+ * Publish Note: Sign & Broadcast Event via Raw WebSockets
+ ***************************************************************/
 async function publishNote() {
   if (!preparedEvent) {
     alert("No prepared event found. Please try again.");
     return;
   }
-
-  // Sign the event
   let signedEvent;
   try {
     signedEvent = await window.nostr.signEvent(preparedEvent);
+    preparedEvent.id = signedEvent.id;
+    preparedEvent.sig = signedEvent.sig;
   } catch (err) {
     console.error("Failed to sign event:", err);
     alert("Could not sign the event. Check console logs.");
     return;
   }
-
-  // Broadcast to all open relays with write permission
   let publishedCount = 0;
   Object.entries(relayConnections).forEach(([url, conn]) => {
     if (conn.isOpen && conn.policy.write) {
@@ -194,37 +170,35 @@ async function publishNote() {
       publishedCount++;
     }
   });
-
   if (publishedCount > 0) {
     document.getElementById("info-area").innerHTML = `
-      <div class="alert alert-success mt-3">
-        <strong>Event published to ${publishedCount} relays!</strong><br/>
+      <div class="alert alert-success">
+        <strong>Event published to ${publishedCount} relay(s)!</strong><br/>
         Event ID: <code>${signedEvent.id}</code><br/>
         Slug (d-tag): <code>${getSlugFromEvent(signedEvent)}</code>
       </div>
     `;
-    // Show the edit button now that we've published at least once
     document.getElementById("edit-btn").classList.remove("hidden");
   } else {
     document.getElementById("info-area").innerHTML = `
-      <div class="alert alert-danger mt-3">
+      <div class="alert alert-danger">
         No open relays with write permission found. Event not sent.
       </div>
     `;
   }
 }
 
-/***************************************************
- * Helper to grab the 'd' tag from the event (if any)
- ***************************************************/
+/***************************************************************
+ * Helper: Get 'd' Tag from Event
+ ***************************************************************/
 function getSlugFromEvent(ev) {
   const dTag = ev.tags.find(tag => tag[0] === 'd');
   return dTag ? dTag[1] : '';
 }
 
-/***************************************************
- * Outbox: load from localStorage
- ***************************************************/
+/***************************************************************
+ * Outbox Functions: Load, Save, Save Draft, Render Outbox
+ ***************************************************************/
 function loadOutbox() {
   try {
     const raw = localStorage.getItem("nostrOutbox");
@@ -234,18 +208,9 @@ function loadOutbox() {
     outbox = [];
   }
 }
-
-/***************************************************
- * Outbox: save to localStorage
- ***************************************************/
 function saveOutbox() {
   localStorage.setItem("nostrOutbox", JSON.stringify(outbox));
 }
-
-/***************************************************
- * "Save to Outbox" button:
- *   Build an event object (WITHOUT signing), store it in outbox
- ***************************************************/
 function saveDraftToOutbox() {
   if (!pubkey) {
     alert("Please connect with Nostr first.");
@@ -256,46 +221,33 @@ function saveDraftToOutbox() {
     alert("No markdown content to save.");
     return;
   }
-
   let slugInput = document.getElementById("slug-input").value.trim();
   if (!slugInput) {
     slugInput = generateRandomSlug();
   }
   currentSlug = slugInput;
-
   const now = Math.floor(Date.now() / 1000);
   const draftEvent = {
     kind: 30023,
-    pubkey: pubkey,
+    pubkey,
     created_at: now,
-    tags: [ ["d", slugInput] ],
+    tags: [["d", slugInput]],
     content: markdownContent
   };
-
-  // Add to outbox array
   outbox.push(draftEvent);
   saveOutbox();
-
   document.getElementById("info-area").innerHTML = `
-    <div class="alert alert-info mt-3">
+    <div class="alert alert-info">
       Draft saved to outbox with slug: <code>${slugInput}</code>
     </div>
   `;
 }
-
-/***************************************************
- * Show outbox modal
- ***************************************************/
 document.getElementById("viewOutboxBtn").addEventListener("click", () => {
   renderOutbox();
   const modalEl = document.getElementById('outboxModal');
   const bsModal = new bootstrap.Modal(modalEl, { keyboard: false });
   bsModal.show();
 });
-
-/***************************************************
- * Render outbox in the table
- ***************************************************/
 function renderOutbox() {
   const tbody = document.getElementById("outboxTableBody");
   tbody.innerHTML = "";
@@ -303,8 +255,7 @@ function renderOutbox() {
     const slug = getSlugFromEvent(ev);
     const snippet = ev.content.slice(0, 40).replace(/\n/g, " ") + (ev.content.length > 40 ? "..." : "");
     const created = new Date(ev.created_at * 1000).toLocaleString();
-
-    const tr = document.createElement("tr");
+    let tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${slug}</td>
       <td>${snippet}</td>
@@ -324,20 +275,10 @@ function renderOutbox() {
     tbody.appendChild(tr);
   });
 }
-
-/***************************************************
- * Show raw JSON in an alert or modal
- ***************************************************/
 function showOutboxJson(index) {
   const ev = outbox[index];
   alert(JSON.stringify(ev, null, 2));
-  // You could also open another modal for pretty display if desired.
 }
-
-/***************************************************
- * Sign & publish an outbox event
- *  - same flow as publishNote(), but using the draft
- ***************************************************/
 async function publishOutboxEvent(index) {
   const ev = outbox[index];
   if (!pubkey) {
@@ -348,8 +289,6 @@ async function publishOutboxEvent(index) {
     alert("This draft belongs to a different pubkey. Cannot sign.");
     return;
   }
-
-  // Sign
   let signedEvent;
   try {
     signedEvent = await window.nostr.signEvent(ev);
@@ -358,8 +297,6 @@ async function publishOutboxEvent(index) {
     alert("Could not sign the event. Check console logs.");
     return;
   }
-
-  // Broadcast
   let publishedCount = 0;
   Object.entries(relayConnections).forEach(([url, conn]) => {
     if (conn.isOpen && conn.policy.write) {
@@ -367,20 +304,97 @@ async function publishOutboxEvent(index) {
       publishedCount++;
     }
   });
-
   if (publishedCount > 0) {
-    alert(`Event published to ${publishedCount} relays!\n\nEvent ID: ${signedEvent.id}`);
+    alert(`Event published to ${publishedCount} relay(s)!\n\nEvent ID: ${signedEvent.id}`);
   } else {
     alert("No open relays with write permission found. Event not sent.");
   }
 }
-
-/***************************************************
- * Remove a draft from outbox
- ***************************************************/
 function removeOutboxEvent(index) {
   if (!confirm("Are you sure you want to delete this draft?")) return;
   outbox.splice(index, 1);
   saveOutbox();
   renderOutbox();
+}
+
+/***************************************************************
+ * Check Existing by d-tag using raw REQ subscription
+ ***************************************************************/
+function checkExistingSlug() {
+  if (!pubkey) {
+    alert("Please connect with Nostr first.");
+    return;
+  }
+  let slug = document.getElementById("slug-input").value.trim();
+  if (!slug) {
+    alert("Please enter a slug to check.");
+    return;
+  }
+  let readRelays = Object.entries(relayConnections).filter(
+    ([url, conn]) => conn.isOpen && conn.policy.read
+  );
+  if (readRelays.length === 0) {
+    alert("No open relays with read permission. Cannot check existing slug.");
+    return;
+  }
+  let foundEvent = null;
+  let bestCreated = 0;
+  let subId = "checkslug-" + Math.random().toString(36).slice(2);
+  let eoseCount = 0;
+  let eoseTarget = readRelays.length;
+
+  function handleMessage(e) {
+    try {
+      let data = JSON.parse(e.data);
+      if (!Array.isArray(data)) return;
+      let [type, thisSubId, payload] = data;
+      if (thisSubId !== subId) return;
+      if (type === "EVENT") {
+        let ev = payload;
+        if (ev.created_at && ev.created_at > bestCreated) {
+          bestCreated = ev.created_at;
+          foundEvent = ev;
+        }
+      } else if (type === "EOSE") {
+        eoseCount++;
+        if (eoseCount >= eoseTarget) {
+          finalizeCheck();
+        }
+      }
+    } catch (err) {
+      console.error("Error in checkExistingSlug:", err);
+    }
+  }
+
+  function finalizeCheck() {
+    readRelays.forEach(([url, conn]) => {
+      conn.ws.removeEventListener("message", handleMessage);
+      conn.ws.send(JSON.stringify(["CLOSE", subId]));
+    });
+    if (foundEvent) {
+      document.getElementById("info-area").innerHTML = `
+        <div class="alert alert-info">
+          Found event for slug <strong>${slug}</strong> from pubkey <strong>${foundEvent.pubkey}</strong>.<br/>
+          Pre-filling with its content.
+        </div>
+      `;
+      document.getElementById("markdown-input").value = foundEvent.content;
+    } else {
+      document.getElementById("info-area").innerHTML = `
+        <div class="alert alert-warning">
+          No event found for slug <strong>${slug}</strong>.
+        </div>
+      `;
+    }
+  }
+
+  readRelays.forEach(([url, conn]) => {
+    conn.ws.addEventListener("message", handleMessage);
+    let filter = {
+      kinds: [30023],
+      "#d": [slug],
+      limit: 1
+    };
+    conn.ws.send(JSON.stringify(["REQ", subId, filter]));
+  });
 }
